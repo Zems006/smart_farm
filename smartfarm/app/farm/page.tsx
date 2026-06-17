@@ -20,6 +20,15 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+const container = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.07 } },
+};
+const cardAnim = {
+  hidden: { opacity: 0, scale: 0.96 },
+  show: { opacity: 1, scale: 1, transition: { ease: "easeOut" as const, duration: 0.35 } },
+};
+
 export default function FarmPage() {
   const [activeTab, setActiveTab] = useState<"fields" | "livestock">("fields");
   const [fields, setFields] = useState<any[]>([]);
@@ -27,10 +36,8 @@ export default function FarmPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Dialog states
   const [fieldDialogOpen, setFieldDialogOpen] = useState(false);
   const [selectedField, setSelectedField] = useState<any | null>(null);
-
   const [livestockDialogOpen, setLivestockDialogOpen] = useState(false);
   const [selectedLivestock, setSelectedLivestock] = useState<any | null>(null);
 
@@ -50,11 +57,8 @@ export default function FarmPage() {
     }
   }
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  // Filter crops and fields
   const filteredFields = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return fields;
@@ -65,7 +69,6 @@ export default function FarmPage() {
     );
   }, [q, fields]);
 
-  // Filter livestock herds
   const filteredLivestock = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return livestock;
@@ -76,7 +79,6 @@ export default function FarmPage() {
     );
   }, [q, livestock]);
 
-  // Operational aggregates
   const fieldStats = useMemo(() => {
     const totalArea = fields.reduce(
       (sum, f) => sum + parseFloat(f.area || "0"),
@@ -113,39 +115,53 @@ export default function FarmPage() {
     };
   }, [livestock]);
 
-  // Field operations
-  const handleSaveField = async (fieldData: any) => {
-    if (fieldData.id) {
-      await dbService.updateField(fieldData.id, fieldData);
-    } else {
-      await dbService.createField(fieldData);
+  const handleSaveField = async (data: any) => {
+    const res = data.id 
+      ? await dbService.updateField(data.id, data)
+      : await dbService.createField(data);
+    if (res) {
+      loadData();
+      return true;
     }
-    loadData();
+    return false;
   };
-
   const handleDeleteField = async (id: string) => {
-    if (confirm("Are you sure you want to delete this field?")) {
-      await dbService.deleteField(id);
+    if (confirm("Delete this field?")) { await dbService.deleteField(id); loadData(); }
+  };
+  const handleSaveLivestock = async (data: any) => {
+    const res = data.id 
+      ? await dbService.updateLivestock(data.id, data)
+      : await dbService.createLivestock(data);
+    if (res) {
       loadData();
+      return true;
     }
+    return false;
   };
-
-  // Livestock operations
-  const handleSaveLivestock = async (livestockData: any) => {
-    if (livestockData.id) {
-      await dbService.updateLivestock(livestockData.id, livestockData);
-    } else {
-      await dbService.createLivestock(livestockData);
-    }
-    loadData();
-  };
-
   const handleDeleteLivestock = async (id: string) => {
-    if (confirm("Are you sure you want to delete this livestock batch?")) {
-      await dbService.deleteLivestock(id);
-      loadData();
-    }
+    if (confirm("Delete this livestock batch?")) { await dbService.deleteLivestock(id); loadData(); }
   };
+
+  const tabs = [
+    { id: 'fields' as const, label: 'Crops & Fields', icon: Wheat },
+    { id: 'livestock' as const, label: 'Livestock Herds', icon: Beef },
+  ];
+
+  const fieldStatCards = [
+    { label: "Total Fields", value: fieldStats.count, icon: MapPin, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+    { label: "Total Area", value: fieldStats.area, icon: Wheat, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
+    { label: "Active Workers", value: fieldStats.workers, icon: Users, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-500/10", border: "border-sky-500/20" },
+    { label: "Avg. Moisture", value: fieldStats.moisture, icon: Droplet, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
+  ];
+
+  const livestockStatCards = [
+    { label: "Total Animals", value: livestockStats.total.toLocaleString(), icon: Beef, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+    { label: "Healthy Batches", value: livestockStats.healthy, icon: Activity, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20" },
+    { label: "Needs Attention", value: livestockStats.attention, icon: HeartPulse, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20" },
+    { label: "Active Herds", value: livestock.length, icon: Users, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
+  ];
+
+  const activeStatCards = activeTab === 'fields' ? fieldStatCards : livestockStatCards;
 
   return (
     <DashboardLayout>
@@ -427,20 +443,8 @@ export default function FarmPage() {
         </div>
       </div>
 
-      {/* Dialog Modals */}
-      <AddEditFieldDialog
-        open={fieldDialogOpen}
-        onOpenChange={setFieldDialogOpen}
-        field={selectedField}
-        onSave={handleSaveField}
-      />
-
-      <AddEditLivestockDialog
-        open={livestockDialogOpen}
-        onOpenChange={setLivestockDialogOpen}
-        livestock={selectedLivestock}
-        onSave={handleSaveLivestock}
-      />
+      <AddEditFieldDialog open={fieldDialogOpen} onOpenChange={setFieldDialogOpen} field={selectedField} onSave={handleSaveField} />
+      <AddEditLivestockDialog open={livestockDialogOpen} onOpenChange={setLivestockDialogOpen} livestock={selectedLivestock} onSave={handleSaveLivestock} />
     </DashboardLayout>
   );
 }
